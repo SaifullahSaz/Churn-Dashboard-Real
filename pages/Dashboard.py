@@ -182,7 +182,7 @@ with row1_col2:
 # ========== CHART 3 — Key Drivers ==========
 with row2_col1:
     st.markdown("### 🔍 Key Churn Drivers")
-    st.markwodn("This chart shows the top factors most strongly linked to churn.")
+    st.markdown("This chart shows the top factors most strongly linked to churn.")
 
     numeric_features = result_df.select_dtypes(include=["number"]).columns
     numeric_features = [c for c in numeric_features if c not in ["churn_label", "churn_probability"]]
