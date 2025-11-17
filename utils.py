@@ -12,8 +12,8 @@ import time
 
 # Initialize Supabase client
 def _get_supabase_client():
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
+    url = st.secrets["supabase"]["SUPABASE_URL"]
+    key = st.secrets["supabase"]["SUPABASE_KEY"]
     return create_client(url, key)
 
 @st.cache_data(ttl=60*5)  # cache 5 minutes; adjust as needed
