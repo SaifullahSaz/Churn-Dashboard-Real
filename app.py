@@ -1,6 +1,8 @@
 
 import streamlit as st
 
+st.write("Secrets loaded:", "supabase" in st.secrets)
+
 st.set_page_config(page_title="Customer Churn Prediction Dashboard", layout="wide")
 
 st.title("🏠 Home — Customer Churn Dashboard")
