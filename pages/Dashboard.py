@@ -129,6 +129,7 @@ row2_col1, row2_col2 = st.columns(2)
 # ========== CHART 1 — Risk Distribution ==========
 with row1_col1:
     st.markdown("### 📊 Churn Risk Distribution")
+    st.markdown("This is pembahagian churn probability by groups")
 
     bins = [0, 0.2, 0.4, 0.6, 0.8, 1.01]
     labels = ["Low", "Medium-Low", "Medium", "High", "Critical"]
