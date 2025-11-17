@@ -129,7 +129,7 @@ row2_col1, row2_col2 = st.columns(2)
 # ========== CHART 1 — Risk Distribution ==========
 with row1_col1:
     st.markdown("### 📊 Churn Risk Distribution")
-    st.markdown("This is pembahagian churn probability by groups")
+    st.markdown("This chart shows how many customers fall into each churn risk category.")
 
     bins = [0, 0.2, 0.4, 0.6, 0.8, 1.01]
     labels = ["Low", "Medium-Low", "Medium", "High", "Critical"]
@@ -155,6 +155,7 @@ with row1_col1:
 # ========== CHART 2 — Churn by Contract ==========
 with row1_col2:
     st.markdown("### 📋 Churn by Contract Type")
+    st.markdown("This chart compares churn rates across different contract types.")
 
     if "Contract" in result_df.columns:
         contract_stats = result_df.groupby("Contract").agg(
@@ -181,6 +182,7 @@ with row1_col2:
 # ========== CHART 3 — Key Drivers ==========
 with row2_col1:
     st.markdown("### 🔍 Key Churn Drivers")
+    st.markwodn("This chart shows the top factors most strongly linked to churn.")
 
     numeric_features = result_df.select_dtypes(include=["number"]).columns
     numeric_features = [c for c in numeric_features if c not in ["churn_label", "churn_probability"]]
@@ -207,6 +209,7 @@ with row2_col1:
 # ========== CHART 4 — Tenure Trend ==========
 with row2_col2:
     st.markdown("### ⏳ Churn Trend by Tenure")
+    st.markdown("This line chart shows how churn rate changes with customer tenure.")
 
     if "tenure" in result_df.columns:
         result_df["Tenure_Group"] = pd.cut(
