@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import xgboost as xgb
+import shap
+import matplotlib.pyplot as plt
 
 from utils import (
     predict_df,
@@ -9,6 +12,10 @@ from utils import (
     fetch_table_from_supabase,
     upsert_predictions_to_supabase
 )
+
+# Load your XGBoost model (match your saved file)
+xgb_model = xgb.XGBClassifier()
+xgb_model.load_model("best_model.pkl")   # or .pkl if that's how you saved it
 
 # -------------------------------------------------------------
 # PAGE CONFIG
@@ -179,32 +186,33 @@ with row1_col2:
     else:
         st.info("Contract column missing from predictions.")
 
-# ========== CHART 3 — Key Drivers ==========
+# ========== CHART 3 — Key Drivers (SHAP) ==========
 with row2_col1:
-    st.markdown("### 🔍 Key Churn Drivers")
-    st.markdown("This chart shows the top factors most strongly linked to churn.")
+    st.markdown("### 🔍 Key Churn Drivers (SHAP Explainability)")
+    st.markdown("This chart shows which features the XGBoost model considers most influential in predicting churn.")
 
-    numeric_features = result_df.select_dtypes(include=["number"]).columns
-    numeric_features = [c for c in numeric_features if c not in ["churn_label", "churn_probability"]]
+    import matplotlib.pyplot as plt
 
-    corr_values = {
-        col: abs(result_df[col].corr(result_df["churn_label"]))
-        for col in numeric_features
-    }
+    # Ensure you extract only the model features
+    # If load_model() returns (model, feature_list)
+    _, features = load_model()
 
-    corr_df = pd.DataFrame(list(corr_values.items()), columns=["Feature", "Correlation"])
-    corr_df = corr_df.sort_values("Correlation", ascending=False).head(10)
+    # Make sure the data passed to SHAP matches the model's expected feature order
+    shap_input = result_df[features]
 
-    fig3 = px.bar(
-        corr_df,
-        y="Feature",
-        x="Correlation",
-        orientation="h",
-        color="Correlation",
-        color_continuous_scale="Purples"
-    )
-    fig3.update_layout(height=300, margin=dict(l=20, r=20, t=10, b=20))
-    st.plotly_chart(fig3, use_container_width=True)
+    # Create SHAP explainer
+    explainer = shap.TreeExplainer(xgb_model)
+
+    # Compute SHAP values
+    shap_values = explainer.shap_values(shap_input)
+
+    # Plot SHAP summary bar chart
+    fig, ax = plt.subplots()
+    shap.summary_plot(shap_values, shap_input, plot_type="bar", show=False)
+    st.pyplot(fig)
+
+    st.caption("Top features influencing churn based on SHAP values from the XGBoost model.")
+
 
 # ========== CHART 4 — Tenure Trend ==========
 with row2_col2:
