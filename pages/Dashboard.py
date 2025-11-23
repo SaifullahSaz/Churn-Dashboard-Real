@@ -206,11 +206,12 @@ with row2_col1:
 
     shap_input = processed_df[feature_list]
 
-    explainer = shap.KernelExplainer(lr_model.predict_proba, shap_input)
+    # Use LinearExplainer for Logistic Regression (FAST + STABLE)
+    explainer = shap.LinearExplainer(lr_model, shap_input, feature_perturbation="interventional")
     shap_values = explainer.shap_values(shap_input)
 
     fig, ax = plt.subplots()
-    shap.summary_plot(shap_values[1], shap_input, plot_type="bar", show=False)
+    shap.summary_plot(shap_values, shap_input, plot_type="bar", show=False)
     st.pyplot(fig)
 
     st.caption("Top features influencing churn (Logistic Regression + SHAP).")
