@@ -208,7 +208,9 @@ with row2_col1:
     st.markdown("### 🔍 Key Churn Drivers (SHAP Explainability)")
 
 
-    shap_input = processed_df[feature_list].sample(300, random_state=42)
+    sample_size = min(300, len(processed_df))  # prevent sampling error
+    shap_input = processed_df[feature_list].sample(sample_size, random_state=42)
+
 
     # FAST, STABLE, PERFECT FOR LOGISTIC REGRESSION
     explainer = shap.LinearExplainer(lr_model, shap_input, feature_perturbation="interventional")
