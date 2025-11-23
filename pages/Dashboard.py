@@ -201,12 +201,16 @@ with row1_col2:
         st.info("Contract column missing.")
 
 # ========== CHART 3 — SHAP KEY DRIVERS ==========
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 with row2_col1:
     st.markdown("### 🔍 Key Churn Drivers (SHAP Explainability)")
 
-    shap_input = processed_df[feature_list]
 
-    # Use LinearExplainer for Logistic Regression (FAST + STABLE)
+    shap_input = processed_df[feature_list].sample(300, random_state=42)
+
+    # FAST, STABLE, PERFECT FOR LOGISTIC REGRESSION
     explainer = shap.LinearExplainer(lr_model, shap_input, feature_perturbation="interventional")
     shap_values = explainer.shap_values(shap_input)
 

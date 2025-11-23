@@ -9,3 +9,4 @@ joblib>=1.2.0
 matplotlib>=3.6.0
 pytest>=7.0.0
 shap
+warnings
