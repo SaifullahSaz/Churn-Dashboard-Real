@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import xgboost as xgb
 import shap
+import pickle
 import matplotlib.pyplot as plt
 
 from utils import (
@@ -13,23 +13,25 @@ from utils import (
     upsert_predictions_to_supabase
 )
 
-# Load your XGBoost model (match your saved file)
-xgb_model = xgb.XGBClassifier()
-xgb_model.load_model("best_model.pkl")   # or .pkl if that's how you saved it
+# -------------------------------------------------------------
+# LOAD BEST MODEL (Logistic Regression + feature list)
+# -------------------------------------------------------------
+with open("models/best_model.pkl", "rb") as file:
+    model_data = pickle.load(file)
+
+lr_model = model_data["model"]
+feature_list = model_data["features"]
 
 # -------------------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------------------
 st.set_page_config(page_title="Churn Dashboard", layout="wide")
-
-# Page title
 st.title("📊 Churn Prediction Dashboard")
 
 # -------------------------------------------------------------
-# HELPER: NORMALIZE SUPABASE COLUMN NAMES
+# SUPABASE COLUMN NORMALIZER
 # -------------------------------------------------------------
 def normalize_supabase_columns(df):
-    """Rename Supabase lowercase columns to match original prediction DF."""
     rename_map = {
         "customerid": "customerID",
         "monthlycharges": "MonthlyCharges",
@@ -40,12 +42,10 @@ def normalize_supabase_columns(df):
         "churn_label": "churn_label",
         "risk_level": "risk_level",
     }
-    df = df.rename(columns=rename_map)
-    return df
-
+    return df.rename(columns=rename_map)
 
 # -------------------------------------------------------------
-# LOAD FROM SUPABASE (BUTTON)
+# LOAD FROM SUPABASE
 # -------------------------------------------------------------
 st.subheader("📦 Load Stored Predictions")
 
@@ -62,9 +62,8 @@ if st.button("Load Predictions from Supabase"):
     except Exception as e:
         st.error(f"Error loading predictions: {str(e)}")
 
-
 # -------------------------------------------------------------
-# FILE UPLOAD (IF NO PREDICTIONS STORED)
+# UPLOAD CSV IF NO PREDICTIONS
 # -------------------------------------------------------------
 if "predictions" not in st.session_state:
     st.warning("⚠️ No predictions available. Upload a CSV to generate predictions.")
@@ -81,10 +80,10 @@ if "predictions" not in st.session_state:
             st.error(f"Failed to generate predictions: {e}")
             st.stop()
     else:
-        st.stop()  # Stop page here until predictions exist
+        st.stop()
 
 # -------------------------------------------------------------
-# MAIN DATAFRAME
+# MAIN DATA
 # -------------------------------------------------------------
 result_df = st.session_state["predictions"]
 
@@ -96,10 +95,9 @@ st.subheader("💾 Save Predictions")
 if st.button("Save Predictions to Supabase"):
     try:
         upsert_predictions_to_supabase("predictions", result_df)
-        st.success("Predictions successfully saved to Supabase!")
+        st.success("Predictions successfully saved!")
     except Exception as e:
         st.error(f"Failed to save: {str(e)}")
-
 
 # -------------------------------------------------------------
 # TOP METRICS
@@ -125,44 +123,40 @@ with col3:
 with col4:
     st.metric("Revenue at Risk", f"${revenue_at_risk:,.0f}/mo")
 
-
 # -------------------------------------------------------------
-# CHARTS
+# CHART LAYOUT
 # -------------------------------------------------------------
 st.markdown("---")
 row1_col1, row1_col2 = st.columns(2)
 row2_col1, row2_col2 = st.columns(2)
 
-# ========== CHART 1 — Risk Distribution ==========
+# ========== CHART 1 — RISK DISTRIBUTION ==========
 with row1_col1:
     st.markdown("### 📊 Churn Risk Distribution")
-    st.markdown("This chart shows how many customers fall into each churn risk category.")
 
     bins = [0, 0.2, 0.4, 0.6, 0.8, 1.01]
     labels = ["Low", "Medium-Low", "Medium", "High", "Critical"]
 
     result_df["Risk_Segment"] = pd.cut(
-        result_df["churn_probability"],
-        bins=bins,
-        labels=labels,
-        include_lowest=True
+        result_df["churn_probability"], bins=bins, labels=labels, include_lowest=True
     )
 
     dist_df = result_df["Risk_Segment"].value_counts().sort_index().reset_index()
     dist_df.columns = ["Risk Level", "Count"]
 
     fig1 = px.bar(
-        dist_df, x="Risk Level", y="Count",
+        dist_df,
+        x="Risk Level",
+        y="Count",
         color="Risk Level",
         color_discrete_sequence=["#10b981", "#84cc16", "#f59e0b", "#f97316", "#ef4444"]
     )
-    fig1.update_layout(height=300, margin=dict(l=20, r=20, t=10, b=40))
+    fig1.update_layout(height=300)
     st.plotly_chart(fig1, use_container_width=True)
 
-# ========== CHART 2 — Churn by Contract ==========
+# ========== CHART 2 — CHURN BY CONTRACT ==========
 with row1_col2:
     st.markdown("### 📋 Churn by Contract Type")
-    st.markdown("This chart compares churn rates across different contract types.")
 
     if "Contract" in result_df.columns:
         contract_stats = result_df.groupby("Contract").agg(
@@ -181,43 +175,29 @@ with row1_col2:
             text="Churn_Rate"
         )
         fig2.update_traces(texttemplate="%{text:.1f}%")
-        fig2.update_layout(height=300, margin=dict(l=20, r=20, t=10, b=40))
+        fig2.update_layout(height=300)
         st.plotly_chart(fig2, use_container_width=True)
     else:
-        st.info("Contract column missing from predictions.")
+        st.info("Contract column missing.")
 
-# ========== CHART 3 — Key Drivers (SHAP) ==========
+# ========== CHART 3 — SHAP KEY DRIVERS (LOGISTIC REGRESSION) ==========
 with row2_col1:
     st.markdown("### 🔍 Key Churn Drivers (SHAP Explainability)")
-    st.markdown("This chart shows which features the XGBoost model considers most influential in predicting churn.")
 
-    import matplotlib.pyplot as plt
+    shap_input = result_df[feature_list]
 
-    # Ensure you extract only the model features
-    # If load_model() returns (model, feature_list)
-    _, features = load_model()
-
-    # Make sure the data passed to SHAP matches the model's expected feature order
-    shap_input = result_df[features]
-
-    # Create SHAP explainer
-    explainer = shap.TreeExplainer(xgb_model)
-
-    # Compute SHAP values
+    explainer = shap.KernelExplainer(lr_model.predict_proba, shap_input)
     shap_values = explainer.shap_values(shap_input)
 
-    # Plot SHAP summary bar chart
     fig, ax = plt.subplots()
-    shap.summary_plot(shap_values, shap_input, plot_type="bar", show=False)
+    shap.summary_plot(shap_values[1], shap_input, plot_type="bar", show=False)
     st.pyplot(fig)
 
-    st.caption("Top features influencing churn based on SHAP values from the XGBoost model.")
+    st.caption("Top features influencing churn (Logistic Regression + SHAP).")
 
-
-# ========== CHART 4 — Tenure Trend ==========
+# ========== CHART 4 — TENURE TREND ==========
 with row2_col2:
     st.markdown("### ⏳ Churn Trend by Tenure")
-    st.markdown("This line chart shows how churn rate changes with customer tenure.")
 
     if "tenure" in result_df.columns:
         result_df["Tenure_Group"] = pd.cut(
@@ -239,17 +219,7 @@ with row2_col2:
             y=tenure_stats["Churn_Rate"],
             mode="lines+markers",
             line=dict(color="#ef4444", width=3),
-            marker=dict(size=8)
+            marker=dict(size=8),
         ))
-        fig4.update_layout(
-            height=300,
-            margin=dict(l=20, r=20, t=10, b=40),
-            yaxis_title="Churn Rate (%)",
-            xaxis_title="Tenure Group"
-        )
+        fig4.update_layout(height=300)
         st.plotly_chart(fig4, use_container_width=True)
-
-
-# -------------------------------------------------------------
-# END OF FILE
-# -------------------------------------------------------------
