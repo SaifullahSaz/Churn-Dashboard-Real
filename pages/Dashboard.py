@@ -14,7 +14,7 @@ from utils import (
 )
 
 # -------------------------------------------------------------
-# LOAD BEST MODEL (Logistic Regression + feature list)
+# LOAD BEST MODEL (LOGISTIC REGRESSION + FEATURE LIST)
 # -------------------------------------------------------------
 with open("models/best_model.pkl", "rb") as file:
     model_data = pickle.load(file)
@@ -57,13 +57,18 @@ if st.button("Load Predictions from Supabase"):
             st.info("No stored predictions found in Supabase.")
         else:
             df_supabase = normalize_supabase_columns(df_supabase)
-            st.session_state["predictions"] = df_supabase
+
+            # Recreate processed features for SHAP
+            result_df, processed_df = predict_df(df_supabase.copy(), return_processed=True)
+            st.session_state["predictions"] = result_df
+            st.session_state["processed_df"] = processed_df
+
             st.success("Loaded predictions from Supabase!")
     except Exception as e:
         st.error(f"Error loading predictions: {str(e)}")
 
 # -------------------------------------------------------------
-# UPLOAD CSV IF NO PREDICTIONS
+# UPLOAD CSV IF NO STORED PREDICTIONS
 # -------------------------------------------------------------
 if "predictions" not in st.session_state:
     st.warning("⚠️ No predictions available. Upload a CSV to generate predictions.")
@@ -73,8 +78,10 @@ if "predictions" not in st.session_state:
         try:
             df = pd.read_csv(uploaded)
             with st.spinner("Generating predictions..."):
-                result_df = predict_df(df.copy())
+                result_df, processed_df = predict_df(df.copy(), return_processed=True)
                 st.session_state["predictions"] = result_df
+                st.session_state["processed_df"] = processed_df
+
             st.success("Predictions generated successfully!")
         except Exception as e:
             st.error(f"Failed to generate predictions: {e}")
@@ -83,9 +90,15 @@ if "predictions" not in st.session_state:
         st.stop()
 
 # -------------------------------------------------------------
-# MAIN DATA
+# GET FINAL DATAFRAMES
 # -------------------------------------------------------------
 result_df = st.session_state["predictions"]
+processed_df = st.session_state.get("processed_df", None)
+
+# SAFETY CHECK: If processed_df was not stored, rebuild it
+if processed_df is None:
+    _, processed_df = predict_df(result_df.copy(), return_processed=True)
+    st.session_state["processed_df"] = processed_df
 
 # -------------------------------------------------------------
 # SAVE TO SUPABASE BUTTON
@@ -141,7 +154,12 @@ with row1_col1:
         result_df["churn_probability"], bins=bins, labels=labels, include_lowest=True
     )
 
-    dist_df = result_df["Risk_Segment"].value_counts().sort_index().reset_index()
+    dist_df = (
+        result_df["Risk_Segment"]
+        .value_counts()
+        .sort_index()
+        .reset_index()
+    )
     dist_df.columns = ["Risk Level", "Count"]
 
     fig1 = px.bar(
@@ -164,7 +182,9 @@ with row1_col2:
             total=("churn_label", "count")
         ).reset_index()
 
-        contract_stats["Churn_Rate"] = contract_stats["churned"] / contract_stats["total"] * 100
+        contract_stats["Churn_Rate"] = (
+            contract_stats["churned"] / contract_stats["total"] * 100
+        )
 
         fig2 = px.bar(
             contract_stats,
@@ -180,11 +200,11 @@ with row1_col2:
     else:
         st.info("Contract column missing.")
 
-# ========== CHART 3 — SHAP KEY DRIVERS (LOGISTIC REGRESSION) ==========
+# ========== CHART 3 — SHAP KEY DRIVERS ==========
 with row2_col1:
     st.markdown("### 🔍 Key Churn Drivers (SHAP Explainability)")
 
-    shap_input = result_df[feature_list]
+    shap_input = processed_df[feature_list]
 
     explainer = shap.KernelExplainer(lr_model.predict_proba, shap_input)
     shap_values = explainer.shap_values(shap_input)
@@ -211,7 +231,9 @@ with row2_col2:
             total=("churn_label", "count")
         ).reset_index()
 
-        tenure_stats["Churn_Rate"] = tenure_stats["churned"] / tenure_stats["total"] * 100
+        tenure_stats["Churn_Rate"] = (
+            tenure_stats["churned"] / tenure_stats["total"] * 100
+        )
 
         fig4 = go.Figure()
         fig4.add_trace(go.Scatter(

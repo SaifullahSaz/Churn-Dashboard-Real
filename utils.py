@@ -290,32 +290,28 @@ def preprocess_data(df):
 
 #     return original
 
-def predict_df(df, model=None):
+def predict_df(df, return_processed=False):
     """
-    Preprocess input df, run predictions, and return original df with:
-    - churn_probability
-    - churn_label
-    - risk_level
+    Preprocess input df, run predictions, and return:
+    - original df with predictions
+    - AND optionally the processed df for SHAP
     """
     original = df.copy()
 
-    # Load model and feature list
-    try:
-        model_obj, feature_list = load_model()
-    except Exception:
-        raise
+    # Load model + feature list
+    model_obj, feature_list = load_model()
 
-    # Preprocess data
+    # Preprocess
     processed = preprocess_data(df.copy())
 
-    # Ensure expected features exist
+    # Ensure model-required columns exist
     if feature_list is not None:
         for col in feature_list:
             if col not in processed.columns:
                 processed[col] = 0
         processed = processed[feature_list]
 
-    # Predict
+    # Predict probabilities
     try:
         probs = model_obj.predict_proba(processed)[:, 1]
     except Exception:
@@ -341,7 +337,12 @@ def predict_df(df, model=None):
 
     original["risk_level"] = original["churn_probability"].apply(risk_map)
 
-    return original
+    # Return both raw+predictions and processed DF if requested
+    if return_processed:
+        return original, processed
+    else:
+        return original
+
 
 
 
